@@ -1,65 +1,125 @@
 import React from 'react'
 
-export const EFIFAMeter = ({ level, preview = false }) => {
+const classicColors = [
+  '#22c55e', '#22c55e', '#22c55e', '#22c55e', '#22c55e', '#22c55e', '#22c55e', '#22c55e', '#22c55e', '#22c55e', 
+  '#facc15', '#facc15', '#facc15', 
+  '#ef4444', '#ef4444', '#ef4444'
+]
+
+const designs = {
+  classic: {
+    name: 'Classic',
+    activeColors: classicColors,
+    inactiveColor: '#1f2937',
+    gap: 0,
+    borderRadius: 0,
+    width: '100%',
+    glow: false
+  },
+  round: {
+    name: 'Round Dots',
+    activeColors: classicColors,
+    inactiveColor: '#1f2937',
+    gap: 12,
+    borderRadius: '50%',
+    width: '60%',
+    glow: false
+  },
+  blocks: {
+    name: 'Soft Blocks',
+    activeColors: classicColors,
+    inactiveColor: '#1f2937',
+    gap: 4,
+    borderRadius: 4,
+    width: '90%',
+    glow: false
+  },
+  pills: {
+    name: 'Pills',
+    activeColors: classicColors,
+    inactiveColor: '#1f2937',
+    gap: 6,
+    borderRadius: 50,
+    width: '80%',
+    glow: false
+  },
+  lines: {
+    name: 'Thin Lines',
+    activeColors: classicColors,
+    inactiveColor: '#1f2937',
+    gap: 50,
+    borderRadius: 2,
+    width: '95%',
+    glow: true
+  },
+  slim: {
+    name: 'Slim Center',
+    activeColors: classicColors,
+    inactiveColor: '#1f2937',
+    gap: 2,
+    borderRadius: 0,
+    width: '40%',
+    glow: false
+  },
+  bricks: {
+    name: 'Bricks',
+    activeColors: classicColors,
+    inactiveColor: '#1f2937',
+    gap: 8,
+    borderRadius: 1,
+    width: '100%',
+    glow: false
+  }
+}
+
+export const designList = Object.keys(designs).map(key => ({ id: key, name: designs[key].name }))
+
+export const EFIFAMeter = ({ level = 0, preview = false, design = 'classic' }) => {
   const ledCount = 16
-  
-  // Full size for broadcast, small preview for admin
   const scale = preview ? 0.15 : 1
-  const ledHeight = 86 * scale
   const containerSize = 1376 * scale
   const barWidth = containerSize / 2
   
+  const currentDesign = designs[design] || designs.classic
+  const gap = currentDesign.gap * scale
+
   return (
-    <div 
-      style={{ 
-        position: preview ? 'relative' : 'absolute',
-        top: preview ? undefined : 0,
-        left: preview ? undefined : 0,
-        width: containerSize, 
-        height: containerSize,
-        background: 'transparent',
-        display: 'flex'
-      }}
-    >
-      {/* Stereo LED bars - L and R channels */}
-      {['L', 'R'].map((channel) => (
-        <div 
-          key={channel} 
-          style={{
+    <div style={{ 
+      width: containerSize, 
+      height: containerSize,
+      display: 'flex',
+      background: 'transparent'
+    }}>
+      {['L', 'R'].map((channel) => {
+        const channelLevel = channel === 'L' ? level : level * 0.95
+        return (
+          <div key={channel} style={{
             display: 'flex',
             flexDirection: 'column-reverse',
+            alignItems: 'center',
             width: barWidth,
-            height: containerSize
-          }}
-        >
-          {Array.from({ length: ledCount }, (_, i) => {
-            const threshold = (i + 1) / ledCount
-            const effectiveLevel = channel === 'L' ? level : level * 0.95
-            const isActive = effectiveLevel >= threshold
-            
-            // Color zones: green (0-60%), yellow (60-80%), red (80-100%)
-            let activeColor = '#22c55e' // green-500
-            
-            if (i >= ledCount * 0.6 && i < ledCount * 0.8) {
-              activeColor = '#facc15' // yellow-400
-            } else if (i >= ledCount * 0.8) {
-              activeColor = '#ef4444' // red-500
-            }
-            
-            return (
-              <div 
-                key={i}
-                style={{
-                  width: '100%',
-                  height: ledHeight,
-                  backgroundColor: isActive ? activeColor : '#1f2937',
-                  transition: 'background-color 50ms'
-                }}
-              />
-            )
-          })}
-        </div>
-      ))}
+            height: containerSize,
+            gap: gap
+          }}>
+            {Array.from({ length: ledCount }, (_, i) => {
+              const threshold = (i + 1) / ledCount
+              const isActive = channelLevel >= threshold
+              const activeColor = currentDesign.activeColors[i] || '#22c55e'
+              
+              return (
+                <div key={i} style={{
+                  width: currentDesign.width || '100%',
+                  flex: 1,
+                  backgroundColor: isActive ? activeColor : currentDesign.inactiveColor,
+                  borderRadius: currentDesign.borderRadius,
+                  boxShadow: isActive && currentDesign.glow ? `0 0 ${10 * scale}px ${activeColor}` : 'none',
+                  transition: 'background-color 0.05s ease'
+                }} />
+              )
+            })}
+          </div>
+        )
+      })}
     </div>
   )
 }

@@ -1,103 +1,51 @@
-import React, { useState, useEffect } from 'react'
-import { useWebSocket } from '../hooks/useWebSocket'
-import { 
-  AnalogMeter, 
-  DigitalMeter, 
-  LEDMeter, 
-  GradientMeter, 
-  CircularMeter,
-  EFIFAMeter
-} from '../components/meters'
-
-const meterComponents = {
-  analog: AnalogMeter,
-  digital: DigitalMeter,
-  led: LEDMeter,
-  gradient: GradientMeter,
-  circular: CircularMeter,
-  efifa: EFIFAMeter,
-}
+import React, { useState, useEffect, useRef } from 'react'
+import { EFIFAMeter } from '../components/meters'
 
 export const BroadcastPage = () => {
-  const { lastMessage, isConnected } = useWebSocket()
-  const [settings, setSettings] = useState({
-    selectedDesign: 'analog',
-    volumeMultiplier: 1.0
-  })
   const [audioLevel, setAudioLevel] = useState(0)
+  const wsRef = useRef(null)
   
-  // Fetch initial settings from server on mount
   useEffect(() => {
-    const apiUrl = window.location.host.includes('localhost:5173') 
-      ? 'http://localhost:3001/settings' 
-      : '/settings'
-    fetch(apiUrl)
-      .then(res => res.json())
-      .then(data => {
-        setSettings(prev => ({ ...prev, ...data }))
-      })
-      .catch(err => console.log('Could not fetch initial settings:', err))
+    const wsUrl = window.location.host.includes('localhost:5173') 
+      ? 'ws://localhost:3001' 
+      : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`
+    
+    const connect = () => {
+      wsRef.current = new WebSocket(wsUrl)
+      
+      wsRef.current.onopen = () => console.log('Broadcast: WS connected')
+      
+      wsRef.current.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          console.log('Broadcast: received', data.type, data.payload?.level)
+          if (data.type === 'audio_level' && data.payload?.level !== undefined) {
+            setAudioLevel(data.payload.level)
+          }
+        } catch (e) { console.error('Parse error:', e) }
+      }
+      
+      wsRef.current.onclose = () => {
+        setTimeout(connect, 2000)
+      }
+    }
+    
+    connect()
+    
+    return () => {
+      if (wsRef.current) wsRef.current.close()
+    }
   }, [])
   
-  // Handle incoming WebSocket messages
-  useEffect(() => {
-    if (!lastMessage) return
-    
-    console.log('Broadcast: Received message:', lastMessage)
-    
-    if (lastMessage.type === 'settings') {
-      console.log('Broadcast: Updating settings to:', lastMessage.payload)
-      setSettings(prev => ({ ...prev, ...lastMessage.payload }))
-    }
-    
-    if (lastMessage.type === 'audio_level') {
-      // Apply volume multiplier from settings
-      const adjustedLevel = Math.min(lastMessage.payload.level * settings.volumeMultiplier, 1)
-      setAudioLevel(adjustedLevel)
-    }
-  }, [lastMessage, settings.volumeMultiplier])
-  
-  const MeterComponent = meterComponents[settings.selectedDesign] || AnalogMeter
-  const isEfifa = settings.selectedDesign === 'efifa'
-  
   return (
-    <div 
-      style={{ 
-        backgroundColor: 'transparent',
-        position: isEfifa ? 'relative' : 'static',
-        width: isEfifa ? 1376 : '100%',
-        height: isEfifa ? 1376 : '100vh',
-        minHeight: isEfifa ? 'auto' : '100vh',
-        display: isEfifa ? 'block' : 'flex',
-        alignItems: isEfifa ? undefined : 'center',
-        justifyContent: isEfifa ? undefined : 'center'
-      }}
-    >
-      {/* Connection indicator - only visible if disconnected */}
-      {!isConnected && (
-        <div className="fixed top-4 left-4 px-3 py-1 bg-red-500/80 text-white text-sm rounded-full animate-pulse">
-          Disconnected - Reconnecting...
-        </div>
-      )}
-      
-      {/* VU Meter only */}
-      <div className="vu-meter-container">
-        <MeterComponent level={audioLevel} />
-      </div>
-      
-      {/* Inline styles for transparent background */}
+    <div style={{ margin: 0, padding: 0 }}>
+      <EFIFAMeter level={audioLevel} />
       <style>{`
-        html, body, #root {
-          background: transparent !important;
-          margin: 0;
-          padding: 0;
-          overflow: ${isEfifa ? 'hidden' : 'auto'};
-        }
-        .vu-meter-container > div {
-          background: transparent !important;
-        }
-        .vu-meter-container > div > div:last-child {
-          display: none !important;
+        html, body, #root { 
+          background: transparent !important; 
+          margin: 0; 
+          padding: 0; 
+          overflow: hidden;
         }
       `}</style>
     </div>

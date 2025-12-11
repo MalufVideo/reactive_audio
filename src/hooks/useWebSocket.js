@@ -36,6 +36,7 @@ export const useWebSocket = () => {
       wsRef.current.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data)
+          console.log('WebSocket raw message received:', data.type)
           setLastMessage(data)
         } catch (err) {
           console.error('Error parsing WebSocket message:', err)

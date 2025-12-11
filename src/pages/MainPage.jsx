@@ -1,172 +1,179 @@
-import React, { useEffect } from 'react'
-import { Link } from 'react-router-dom'
-import { Settings, Mic, MicOff, AlertCircle, Radio } from 'lucide-react'
-import { useStore } from '../store/useStore'
-import { useAudioAnalyzer } from '../hooks/useAudioAnalyzer'
-import { useWebSocket } from '../hooks/useWebSocket'
-import { VolumeControl } from '../components/VolumeControl'
-import { DeviceSelector } from '../components/DeviceSelector'
-import { 
-  AnalogMeter, 
-  DigitalMeter, 
-  LEDMeter, 
-  GradientMeter, 
-  CircularMeter,
-  EFIFAMeter
-} from '../components/meters'
-
-const meterComponents = {
-  analog: AnalogMeter,
-  digital: DigitalMeter,
-  led: LEDMeter,
-  gradient: GradientMeter,
-  circular: CircularMeter,
-  efifa: EFIFAMeter,
-}
+import React, { useEffect, useRef, useState } from 'react'
+import { EFIFAMeter, designList } from '../components/meters'
 
 export const MainPage = () => {
-  const { selectedDesign, volumeMultiplier, selectedDeviceId } = useStore()
-  const { 
-    audioLevel, 
-    isListening, 
-    error, 
-    startListening, 
-    stopListening,
-    refreshDevices 
-  } = useAudioAnalyzer()
+  const [audioLevel, setAudioLevel] = useState(0)
+  const [isListening, setIsListening] = useState(false)
+  const [sensitivity, setSensitivity] = useState(1.0)
+  const [selectedDesign, setSelectedDesign] = useState('classic')
+  const audioContextRef = useRef(null)
+  const analyserRef = useRef(null)
+  const animationRef = useRef(null)
+  const streamRef = useRef(null)
   
-  const { sendAudioLevel, updateSettings, isConnected } = useWebSocket()
-  
-  // Send audio level to broadcast page
-  useEffect(() => {
-    if (isListening && audioLevel !== undefined) {
-      sendAudioLevel(audioLevel)
+  const startListening = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      streamRef.current = stream
+      audioContextRef.current = new AudioContext()
+      analyserRef.current = audioContextRef.current.createAnalyser()
+      analyserRef.current.fftSize = 256
+      
+      const source = audioContextRef.current.createMediaStreamSource(stream)
+      source.connect(analyserRef.current)
+      
+      const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount)
+      
+      const updateLevel = () => {
+        analyserRef.current.getByteFrequencyData(dataArray)
+        const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length
+        const level = Math.min((avg / 255) * sensitivity, 1)
+        setAudioLevel(level)
+        animationRef.current = requestAnimationFrame(updateLevel)
+      }
+      
+      updateLevel()
+      setIsListening(true)
+    } catch (err) {
+      console.error('Mic error:', err)
+      alert('Could not access microphone. Please allow microphone access.')
     }
-  }, [audioLevel, isListening, sendAudioLevel])
+  }
   
-  // Sync settings to server when they change
+  const stopListening = () => {
+    if (animationRef.current) cancelAnimationFrame(animationRef.current)
+    if (audioContextRef.current) audioContextRef.current.close()
+    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop())
+    setIsListening(false)
+    setAudioLevel(0)
+  }
+  
   useEffect(() => {
-    updateSettings({ selectedDesign, volumeMultiplier, selectedDeviceId })
-  }, [selectedDesign, volumeMultiplier, selectedDeviceId, updateSettings])
-  
-  const MeterComponent = meterComponents[selectedDesign] || AnalogMeter
+    return () => stopListening()
+  }, [])
   
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
-      {/* Header */}
-      <header className="bg-gray-900/80 backdrop-blur border-b border-gray-700 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center">
-              <Mic className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-white">VU Meter</h1>
-              <p className="text-xs text-gray-400">Real-time Audio Visualizer</p>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            <Link 
-              to="/broadcast"
-              target="_blank"
-              className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-white transition-colors"
-            >
-              <Radio className="w-5 h-5" />
-              <span>Broadcast</span>
-            </Link>
-            <Link 
-              to="/admin"
-              className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-gray-300 transition-colors"
-            >
-              <Settings className="w-5 h-5" />
-              <span>Admin</span>
-            </Link>
-            {/* Server connection status */}
-            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${isConnected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`} />
-              <span className="text-xs">{isConnected ? 'Server' : 'Offline'}</span>
-            </div>
-          </div>
-        </div>
-      </header>
+    <div style={{ 
+      position: 'relative', 
+      width: '100vw', 
+      height: '100vh', 
+      margin: 0, 
+      padding: 0, 
+      overflow: 'hidden',
+      background: '#000'
+    }}>
+      {/* eFIFA Meter at 0,0 - exactly 1376x1376 */}
+      <div style={{ position: 'absolute', top: 0, left: 0, background: '#111' }}>
+        <EFIFAMeter level={audioLevel} design={selectedDesign} />
+      </div>
       
-      <main className="max-w-7xl mx-auto px-4 py-8">
-        {/* Error message */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-500/20 border border-red-500/50 rounded-lg flex items-center gap-3 text-red-400">
-            <AlertCircle className="w-5 h-5 flex-shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
+      {/* Controls panel - starts at x=1500 */}
+      <div style={{ 
+        position: 'absolute', 
+        top: 0, 
+        left: 1500, 
+        width: 400, 
+        height: '100vh',
+        background: '#1a1a1a',
+        padding: 30,
+        boxSizing: 'border-box'
+      }}>
+        <h1 style={{ color: 'white', fontSize: 24, marginBottom: 30 }}>eFIFA VU Meter</h1>
         
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main meter display */}
-          <div className="lg:col-span-2 flex flex-col items-center">
-            {/* Start/Stop button */}
-            <button
-              onClick={isListening ? stopListening : startListening}
-              className={`mb-8 flex items-center gap-3 px-8 py-4 rounded-xl font-semibold text-lg transition-all transform hover:scale-105 ${
-                isListening 
-                  ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/30' 
-                  : 'bg-green-500 hover:bg-green-600 text-white shadow-lg shadow-green-500/30'
-              }`}
-            >
-              {isListening ? (
-                <>
-                  <MicOff className="w-6 h-6" />
-                  Stop Listening
-                </>
-              ) : (
-                <>
-                  <Mic className="w-6 h-6" />
-                  Start Listening
-                </>
-              )}
-            </button>
-            
-            {/* VU Meter */}
-            <div className="transform transition-all duration-300 hover:scale-105">
-              <MeterComponent level={audioLevel} preview={true} />
-            </div>
-            
-            {/* Status */}
-            <div className="mt-6 flex items-center gap-4">
-              <div className={`w-3 h-3 rounded-full ${isListening ? 'bg-green-500 animate-pulse' : 'bg-gray-600'}`} />
-              <span className="text-gray-400">
-                {isListening ? 'Listening to microphone...' : 'Click Start to begin'}
-              </span>
-            </div>
-            
-            {/* Current design badge */}
-            <div className="mt-4 px-4 py-2 bg-gray-800 rounded-full border border-gray-700">
-              <span className="text-gray-400 text-sm">Current Design: </span>
-              <span className="text-cyan-400 font-medium capitalize">{selectedDesign}</span>
-            </div>
+        {/* Start/Stop Button */}
+        <button
+          onClick={isListening ? stopListening : startListening}
+          style={{
+            width: '100%',
+            padding: '20px',
+            fontSize: 18,
+            fontWeight: 'bold',
+            background: isListening ? '#ef4444' : '#22c55e',
+            color: 'white',
+            border: 'none',
+            borderRadius: 8,
+            cursor: 'pointer',
+            marginBottom: 30
+          }}
+        >
+          {isListening ? '⏹ Stop Listening' : '▶ Start Listening'}
+        </button>
+        
+        {/* Status */}
+        <div style={{ 
+          padding: 15, 
+          background: isListening ? '#22c55e22' : '#333', 
+          borderRadius: 8,
+          marginBottom: 30,
+          textAlign: 'center'
+        }}>
+          <div style={{ color: isListening ? '#22c55e' : '#666', fontSize: 14 }}>
+            {isListening ? '● LIVE' : '○ Stopped'}
           </div>
-          
-          {/* Controls sidebar */}
-          <div className="space-y-6">
-            <VolumeControl />
-            <DeviceSelector onRefresh={refreshDevices} />
-            
-            {/* Quick design switcher */}
-            <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
-              <h3 className="text-white font-semibold mb-4">Quick Design Switch</h3>
-              <p className="text-gray-400 text-sm mb-4">
-                Go to the <Link to="/admin" className="text-cyan-400 hover:underline">Admin page</Link> to 
-                select from 5 different VU meter designs.
-              </p>
-              <Link
-                to="/admin"
-                className="block w-full py-3 text-center bg-cyan-500 hover:bg-cyan-600 text-white font-semibold rounded-lg transition-colors"
-              >
-                Change Design
-              </Link>
-            </div>
+          <div style={{ color: 'white', fontSize: 32, fontWeight: 'bold', marginTop: 5 }}>
+            {(audioLevel * 100).toFixed(0)}%
           </div>
         </div>
-      </main>
+        
+        {/* Design Selector */}
+        <div style={{ marginBottom: 30 }}>
+          <label style={{ color: '#888', fontSize: 14, display: 'block', marginBottom: 10 }}>
+            Design
+          </label>
+          <select
+            value={selectedDesign}
+            onChange={(e) => setSelectedDesign(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '12px',
+              fontSize: 16,
+              background: '#333',
+              color: 'white',
+              border: '1px solid #444',
+              borderRadius: 8,
+              cursor: 'pointer'
+            }}
+          >
+            {designList.map(d => (
+              <option key={d.id} value={d.id}>{d.name}</option>
+            ))}
+          </select>
+        </div>
+        
+        {/* Sensitivity Control */}
+        <div style={{ marginBottom: 30 }}>
+          <label style={{ color: '#888', fontSize: 14, display: 'block', marginBottom: 10 }}>
+            Sensitivity: {sensitivity.toFixed(1)}x
+          </label>
+          <input
+            type="range"
+            min="0.5"
+            max="3"
+            step="0.1"
+            value={sensitivity}
+            onChange={(e) => setSensitivity(parseFloat(e.target.value))}
+            style={{ width: '100%' }}
+          />
+        </div>
+        
+        {/* Info */}
+        <div style={{ color: '#666', fontSize: 12, lineHeight: 1.6 }}>
+          <p><strong>For OBS:</strong></p>
+          <p>Add Browser Source with this URL</p>
+          <p>Set size to 1376×1376</p>
+          <p>Position at 0,0</p>
+        </div>
+      </div>
+      
+      {/* Transparent background styles */}
+      <style>{`
+        html, body, #root { 
+          margin: 0; 
+          padding: 0; 
+          background: transparent !important;
+          overflow: hidden;
+        }
+      `}</style>
     </div>
   )
 }

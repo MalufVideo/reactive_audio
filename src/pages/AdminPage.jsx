@@ -69,6 +69,13 @@ export const AdminPage = () => {
   const [previewLevel, setPreviewLevel] = useState(0)
   const [hoveredDesign, setHoveredDesign] = useState(null)
   
+  // Sync settings to server on mount and when connected
+  useEffect(() => {
+    if (isConnected) {
+      updateSettings({ selectedDesign, volumeMultiplier, selectedDeviceId })
+    }
+  }, [isConnected])
+  
   // Broadcast settings to server when design changes
   const handleDesignSelect = (designId) => {
     console.log('Admin: Selecting design:', designId, 'WebSocket connected:', isConnected)
