@@ -1,13 +1,31 @@
 import { WebSocketServer } from 'ws'
 import http from 'http'
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
 
-const PORT = 3001
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+const PORT = process.env.PORT || 3001
 
 // Store current settings
 let currentSettings = {
   selectedDesign: 'analog',
   volumeMultiplier: 1.0,
   selectedDeviceId: 'default'
+}
+
+// MIME types for static files
+const mimeTypes = {
+  '.html': 'text/html',
+  '.js': 'application/javascript',
+  '.css': 'text/css',
+  '.json': 'application/json',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon'
 }
 
 // Create HTTP server
@@ -22,9 +40,43 @@ const server = http.createServer((req, res) => {
     return
   }
   
+  // API endpoint for settings
+  if (req.url === '/api/settings' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(currentSettings))
+    return
+  }
+  
+  // Legacy settings endpoint
   if (req.url === '/settings' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify(currentSettings))
+    return
+  }
+  
+  // Serve static files from dist folder
+  const distPath = path.join(__dirname, 'dist')
+  let filePath = path.join(distPath, req.url === '/' ? 'index.html' : req.url)
+  
+  // Handle SPA routing - serve index.html for all non-file routes
+  const ext = path.extname(filePath)
+  if (!ext || !fs.existsSync(filePath)) {
+    filePath = path.join(distPath, 'index.html')
+  }
+  
+  if (fs.existsSync(filePath)) {
+    const fileExt = path.extname(filePath)
+    const contentType = mimeTypes[fileExt] || 'application/octet-stream'
+    
+    fs.readFile(filePath, (err, content) => {
+      if (err) {
+        res.writeHead(500)
+        res.end('Server Error')
+        return
+      }
+      res.writeHead(200, { 'Content-Type': contentType })
+      res.end(content)
+    })
     return
   }
   

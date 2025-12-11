@@ -28,7 +28,10 @@ export const BroadcastPage = () => {
   
   // Fetch initial settings from server on mount
   useEffect(() => {
-    fetch('http://localhost:3001/settings')
+    const apiUrl = window.location.host.includes('localhost:5173') 
+      ? 'http://localhost:3001/settings' 
+      : '/settings'
+    fetch(apiUrl)
       .then(res => res.json())
       .then(data => {
         setSettings(prev => ({ ...prev, ...data }))

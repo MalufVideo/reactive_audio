@@ -1,6 +1,20 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
 
-const WS_URL = 'ws://localhost:3001'
+// Use relative WebSocket URL in production, localhost in development
+const getWsUrl = () => {
+  if (typeof window !== 'undefined') {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const host = window.location.host
+    // In production, WebSocket is on same host. In dev, use localhost:3001
+    if (host.includes('localhost:5173')) {
+      return 'ws://localhost:3001'
+    }
+    return `${protocol}//${host}`
+  }
+  return 'ws://localhost:3001'
+}
+
+const WS_URL = getWsUrl()
 
 export const useWebSocket = () => {
   const wsRef = useRef(null)
