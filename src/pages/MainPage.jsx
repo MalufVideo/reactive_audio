@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { EFIFAMeter, designList } from '../components/meters'
 
 export const MainPage = () => {
@@ -16,11 +16,16 @@ export const MainPage = () => {
   const animationRef = useRef(null)
   const streamRef = useRef(null)
   const sensitivityRef = useRef(sensitivity)
+  const isAdminRef = useRef(false)
   
-  // Keep sensitivity ref updated
+  // Keep refs updated
   useEffect(() => {
     sensitivityRef.current = sensitivity
   }, [sensitivity])
+  
+  useEffect(() => {
+    isAdminRef.current = isAdmin
+  }, [isAdmin])
   
   // WebSocket connection
   useEffect(() => {
@@ -74,11 +79,11 @@ export const MainPage = () => {
   }, [])
   
   // Send audio level via WebSocket when listening
-  const sendAudioLevel = useCallback((level) => {
-    if (wsRef.current?.readyState === 1 && isAdmin) {
+  const sendAudioLevel = (level) => {
+    if (wsRef.current?.readyState === 1 && isAdminRef.current) {
       wsRef.current.send(JSON.stringify({ type: 'audio_level', payload: { level } }))
     }
-  }, [isAdmin])
+  }
   
   // Send design change via WebSocket
   const handleDesignChange = (design) => {
